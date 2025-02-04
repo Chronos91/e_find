@@ -1,9 +1,11 @@
-from flask import Flask, request, render_template, jsonify
+from flask import Flask, request, jsonify
 import json
 import os
 
 app = Flask(__name__)
-UPLOAD_FOLDER = 'uploads'
+
+# Vercel's file system is read-only, use '/tmp' for uploads
+UPLOAD_FOLDER = '/tmp'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
@@ -35,11 +37,30 @@ def upload_file():
         if file.filename == '':
             return "No selected file"
 
+        # Save the file in the temporary folder
         file_path = os.path.join(UPLOAD_FOLDER, file.filename)
         file.save(file_path)
 
+        # Flatten cookies from the uploaded file
         flat_json = flatten_cookies(file_path)
         return jsonify(flat_json)
+
+    return '''
+    <!doctype html>
+    <html>
+    <body>
+        <h2>Upload JSON File</h2>
+        <form method="post" enctype="multipart/form-data">
+            <input type="file" name="file">
+            <input type="submit" value="Upload">
+        </form>
+    </body>
+    </html>
+    '''
+
+
+def handler(event, context):
+    return app(event, context)
 
 
 if __name__ == '__main__':
