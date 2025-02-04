@@ -1,32 +1,59 @@
-from flask import Flask, request, jsonify, render_template
-import dns.resolver
+from flask import Flask, request, render_template, jsonify
+import json
+import os
 
 app = Flask(__name__)
+UPLOAD_FOLDER = 'uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-def get_mx_records(domain):
-    try:
-        mx_records = dns.resolver.resolve(domain, 'MX')
-        if not mx_records:
-            return f"No MX records found for {domain}."
 
-        mx_list = [mx.exchange.to_text() for mx in mx_records]
-        return mx_list
-    except dns.resolver.NoAnswer:
-        return f"No MX records found for {domain}."
-    except dns.resolver.NXDOMAIN:
-        return f"The domain {domain} does not exist."
-    except Exception as e:
-        return f"Error fetching MX records: {e}"
+def flatten_cookies(file_path):
+    with open(file_path, "r", encoding="utf-8") as file:
+        data = json.load(file)  # Load JSON from file
 
-@app.route('/')
-def home():
-    return render_template('index.html')
+    flat_list = []
 
-@app.route('/lookup', methods=['POST'])
-def lookup():
-    domain = request.form['domain']
-    mx_records = get_mx_records(domain)
-    return jsonify(mx_records)
+    if "tokens" in data:
+        for domain, cookies in data["tokens"].items():
+            for name, attributes in cookies.items():
+                flat_list.append({
+                    "domain": domain.lstrip("."),
+                    "name": attributes.get("Name", ""),
+                    "path": attributes.get("Path", "/"),
+                    "value": attributes.get("Value", ""),
+                    "httpOnly": attributes.get("HttpOnly", False)
+                })
+    return flat_list
+
+
+@app.route('/', methods=['GET', 'POST'])
+def upload_file():
+    if request.method == 'POST':
+        if 'file' not in request.files:
+            return "No file part"
+        file = request.files['file']
+        if file.filename == '':
+            return "No selected file"
+
+        file_path = os.path.join(UPLOAD_FOLDER, file.filename)
+        file.save(file_path)
+
+        flat_json = flatten_cookies(file_path)
+        return jsonify(flat_json)
+
+    return '''
+    <!doctype html>
+    <html>
+    <body>
+        <h2>Upload JSON File</h2>
+        <form method="post" enctype="multipart/form-data">
+            <input type="file" name="file">
+            <input type="submit" value="Upload">
+        </form>
+    </body>
+    </html>
+    '''
+
 
 if __name__ == '__main__':
     app.run(debug=True)
