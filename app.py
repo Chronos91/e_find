@@ -41,19 +41,6 @@ def upload_file():
         flat_json = flatten_cookies(file_path)
         return jsonify(flat_json)
 
-    return '''
-    <!doctype html>
-    <html>
-    <body>
-        <h2>Upload JSON File</h2>
-        <form method="post" enctype="multipart/form-data">
-            <input type="file" name="file">
-            <input type="submit" value="Upload">
-        </form>
-    </body>
-    </html>
-    '''
-
 
 if __name__ == '__main__':
     app.run(debug=True)
