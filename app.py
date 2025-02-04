@@ -1,67 +1,45 @@
-from flask import Flask, request, jsonify
+from flask import Flask, render_template, request, redirect, url_for, jsonify
 import json
 import os
 
 app = Flask(__name__)
+app.config['UPLOAD_FOLDER'] = 'uploads'
 
-# Vercel's file system is read-only, use '/tmp' for uploads
-UPLOAD_FOLDER = '/tmp'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+# Ensure upload folder exists
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+def flatten_json(data):
+    """ Function to flatten JSON by extracting only cookies. """
+    if isinstance(data, list):
+        return [{"cookies": item.get("cookies", [])} for item in data]
+    return []
 
-def flatten_cookies(file_path):
-    with open(file_path, "r", encoding="utf-8") as file:
-        data = json.load(file)  # Load JSON from file
+@app.route("/", methods=["GET", "POST"])
+def index():
+    if request.method == "POST":
+        # Handle file upload
+        if "file" not in request.files:
+            return "No file part", 400
+        
+        file = request.files["file"]
+        if file.filename == "":
+            return "No selected file", 400
+        
+        if file:
+            file_path = os.path.join(app.config["UPLOAD_FOLDER"], file.filename)
+            file.save(file_path)
+            
+            # Read and process the file
+            try:
+                with open(file_path, "r") as f:
+                    data = json.load(f)  # Load JSON data
+                    flattened_result = flatten_json(data)
+            except json.JSONDecodeError:
+                return "Invalid JSON file", 400
+            
+            return render_template("index.html", result=flattened_result)
+    
+    return render_template("index.html", result=None)
 
-    flat_list = []
-
-    if "tokens" in data:
-        for domain, cookies in data["tokens"].items():
-            for name, attributes in cookies.items():
-                flat_list.append({
-                    "domain": domain.lstrip("."),
-                    "name": attributes.get("Name", ""),
-                    "path": attributes.get("Path", "/"),
-                    "value": attributes.get("Value", ""),
-                    "httpOnly": attributes.get("HttpOnly", False)
-                })
-    return flat_list
-
-
-@app.route('/', methods=['GET', 'POST'])
-def upload_file():
-    if request.method == 'POST':
-        if 'file' not in request.files:
-            return "No file part"
-        file = request.files['file']
-        if file.filename == '':
-            return "No selected file"
-
-        # Save the file in the temporary folder
-        file_path = os.path.join(UPLOAD_FOLDER, file.filename)
-        file.save(file_path)
-
-        # Flatten cookies from the uploaded file
-        flat_json = flatten_cookies(file_path)
-        return jsonify(flat_json)
-
-    return '''
-    <!doctype html>
-    <html>
-    <body>
-        <h2>Upload JSON File</h2>
-        <form method="post" enctype="multipart/form-data">
-            <input type="file" name="file">
-            <input type="submit" value="Upload">
-        </form>
-    </body>
-    </html>
-    '''
-
-
-def handler(event, context):
-    return app(event, context)
-
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(debug=True)
